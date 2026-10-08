@@ -1,0 +1,24 @@
+---
+# Required variables:
+# tc_id, tc_category, tc_name, tc_severity, tc_expected, tc_actual, tc_status
+# Optional: tc_target, tc_evidence, tc_error, tc_remediation, tc_method
+- name: Record {{ tc_id }}
+  ansible.builtin.set_fact:
+    results: >-
+      {{
+        results + [{
+          "test_id": tc_id,
+          "category": tc_category,
+          "test_name": tc_name,
+          "severity": tc_severity,
+          "expected_outcome": tc_expected,
+          "actual_output": tc_actual | default(""),
+          "status": tc_status,
+          "target": tc_target | default(""),
+          "method": tc_method | default(""),
+          "evidence": tc_evidence | default(""),
+          "error": tc_error | default(""),
+          "remediation": tc_remediation | default(""),
+          "timestamp": ansible_date_time.iso8601
+        }]
+      }}

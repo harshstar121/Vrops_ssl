@@ -1,0 +1,29 @@
+---
+- name: vROps authenticated API smoke test
+  ansible.builtin.uri:
+    url: "https://{{ vrops_fqdn }}{{ api_paths.vrops_health }}"
+    method: GET
+    validate_certs: "{{ vrops_api_validate_certs | default(false) }}"
+    user: "{{ vrops_username }}"
+    password: "{{ vrops_password }}"
+    force_basic_auth: true
+    status_code: [200, 401, 403]
+    timeout: "{{ thresholds.api_timeout_seconds }}"
+  register: authenticated_api
+  failed_when: false
+  changed_when: false
+
+- name: Record authenticated API smoke test
+  ansible.builtin.set_fact:
+    tc_id: "API-001"
+    tc_category: "API"
+    tc_name: "Authenticated vROps API smoke test"
+    tc_severity: "High"
+    tc_expected: "Authenticated API request succeeds"
+    tc_actual: "HTTP status={{ authenticated_api.status | default('N/A') }}"
+    tc_status: "{{ 'PASS' if authenticated_api.status | default(0) == 200 else 'FAIL' }}"
+    tc_target: "{{ vrops_fqdn }}"
+    tc_method: "REST API with credentials"
+    tc_error: "{{ authenticated_api.msg | default('') }}"
+    tc_remediation: "Verify account permissions and API endpoint for this Aria Operations release."
+  ansible.builtin.include_tasks: _record.yml

@@ -1,0 +1,98 @@
+---
+- name: Inspect TLS certificate
+  ansible.builtin.shell: |
+    set -o pipefail
+    echo | openssl s_client -connect {{ vrops_fqdn }}:443 -servername {{ vrops_fqdn }} -showcerts 2>/dev/null |
+      openssl x509 -noout -subject -issuer -serial -dates -ext subjectAltName
+  args:
+    executable: /bin/bash
+  register: cert_raw
+  changed_when: false
+  failed_when: false
+
+- name: Parse certificate expiry
+  ansible.builtin.shell: |
+    echo "{{ cert_raw.stdout }}" | awk -F= '/notAfter=/{print $2}'
+  register: cert_expiry_raw
+  changed_when: false
+  failed_when: false
+
+- name: Calculate certificate expiry days
+  ansible.builtin.shell: |
+    expiry="{{ cert_expiry_raw.stdout | trim }}"
+    if [ -z "$expiry" ]; then exit 2; fi
+    expiry_epoch=$(date -d "$expiry" +%s)
+    now_epoch=$(date +%s)
+    echo $(( (expiry_epoch - now_epoch) / 86400 ))
+  register: cert_days
+  changed_when: false
+  failed_when: false
+
+- name: Certificate reachable
+  ansible.builtin.set_fact:
+    tc_id: "CERT-001"
+    tc_category: "Certificate"
+    tc_name: "TLS certificate is reachable on vROps HTTPS endpoint"
+    tc_severity: "Critical"
+    tc_expected: "HTTPS endpoint presents a valid X.509 certificate"
+    tc_actual: "{{ cert_raw.stdout | default(cert_raw.stderr, true) | trim }}"
+    tc_status: "{{ 'PASS' if cert_raw.rc == 0 and 'subject=' in cert_raw.stdout else 'FAIL' }}"
+    tc_target: "{{ vrops_fqdn }}"
+    tc_method: "openssl s_client"
+    tc_error: "{{ cert_raw.stderr | default('') }}"
+  ansible.builtin.include_tasks: _record.yml
+
+- name: Certificate expiry threshold
+  ansible.builtin.set_fact:
+    tc_id: "CERT-002"
+    tc_category: "Certificate"
+    tc_name: "Certificate has sufficient remaining validity"
+    tc_severity: "High"
+    tc_expected: "Certificate expires in more than {{ thresholds.certificate_expiry_days }} days"
+    tc_actual: "{{ cert_days.stdout | trim }} days remaining"
+    tc_status: "{{ 'PASS' if cert_days.rc == 0 and (cert_days.stdout | int) > thresholds.certificate_expiry_days else 'FAIL' }}"
+    tc_target: "{{ vrops_fqdn }}"
+    tc_method: "openssl/date"
+    tc_error: "{{ 'Unable to calculate expiry' if cert_days.rc != 0 else '' }}"
+    tc_remediation: "Renew the certificate before it reaches the configured threshold."
+  ansible.builtin.include_tasks: _record.yml
+
+- name: SAN validation
+  ansible.builtin.set_fact:
+    san_ok: >-
+      {{
+        (expected_certificate_sans | default([]) | length == 0)
+        or
+        ((expected_certificate_sans | map('regex_escape') | list | join('|')) is search(cert_raw.stdout))
+      }}
+    tc_id: "CERT-003"
+    tc_category: "Certificate"
+    tc_name: "Certificate SAN contains required hostnames"
+    tc_severity: "Critical"
+    tc_expected: "Certificate SAN contains all configured vROps hostnames"
+    tc_actual: "{{ cert_raw.stdout | trim }}"
+    tc_status: "{{ 'PASS' if san_ok else 'FAIL' }}"
+    tc_target: "{{ vrops_fqdn }}"
+    tc_method: "openssl x509"
+    tc_remediation: "Replace the certificate with a certificate containing all required DNS SANs."
+  ansible.builtin.include_tasks: _record.yml
+
+- name: Issuer validation
+  ansible.builtin.set_fact:
+    issuer_ok: >-
+      {{
+        (expected_certificate_issuer | default('') | length == 0)
+        or
+        (expected_certificate_issuer in cert_raw.stdout)
+      }}
+    tc_id: "CERT-004"
+    tc_category: "Certificate"
+    tc_name: "Certificate issuer validation"
+    tc_severity: "High"
+    tc_expected: "Certificate is issued by the configured CA"
+    tc_actual: "{{ cert_raw.stdout | trim }}"
+    tc_status: "{{ 'PASS' if issuer_ok else 'FAIL' }}"
+    tc_target: "{{ vrops_fqdn }}"
+    tc_method: "openssl x509"
+    tc_remediation: "Verify the certificate chain and issuing CA configured in vRSLCM."
+  ansible.builtin.include_tasks: _record.yml

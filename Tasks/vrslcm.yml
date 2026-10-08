@@ -1,0 +1,58 @@
+---
+- name: vRSLCM health endpoint
+  ansible.builtin.uri:
+    url: "https://{{ vrslcm_fqdn }}{{ api_paths.vrslcm_health }}"
+    method: GET
+    validate_certs: "{{ vrslcm_api_validate_certs | default(false) }}"
+    status_code: [200, 401, 403, 404]
+    timeout: "{{ thresholds.api_timeout_seconds }}"
+    force_basic_auth: true
+    user: "{{ vrslcm_username }}"
+    password: "{{ vrslcm_password }}"
+    return_content: true
+  register: vrslcm_health
+  failed_when: false
+  changed_when: false
+
+- name: Record vRSLCM health
+  ansible.builtin.set_fact:
+    tc_id: "VRSLM-001"
+    tc_category: "vRSLCM"
+    tc_name: "vRSLCM API/health endpoint is reachable"
+    tc_severity: "Critical"
+    tc_expected: "vRSLCM endpoint responds successfully"
+    tc_actual: "HTTP status={{ vrslcm_health.status | default('N/A') }}"
+    tc_status: "{{ 'PASS' if vrslcm_health.status | default(0) == 200 else 'FAIL' }}"
+    tc_target: "{{ vrslcm_fqdn }}"
+    tc_method: "REST API"
+    tc_error: "{{ vrslcm_health.msg | default('') }}"
+  ansible.builtin.include_tasks: _record.yml
+
+- name: vRSLCM environment inventory endpoint
+  ansible.builtin.uri:
+    url: "https://{{ vrslcm_fqdn }}{{ api_paths.vrslcm_environments }}"
+    method: GET
+    validate_certs: "{{ vrslcm_api_validate_certs | default(false) }}"
+    status_code: [200, 401, 403, 404]
+    timeout: "{{ thresholds.api_timeout_seconds }}"
+    force_basic_auth: true
+    user: "{{ vrslcm_username }}"
+    password: "{{ vrslcm_password }}"
+    return_content: true
+  register: vrslcm_env
+  failed_when: false
+  changed_when: false
+
+- name: Record vRSLCM environment inventory
+  ansible.builtin.set_fact:
+    tc_id: "VRSLM-002"
+    tc_category: "vRSLCM"
+    tc_name: "vRSLCM environment inventory is accessible"
+    tc_severity: "High"
+    tc_expected: "vRSLCM can retrieve managed environments"
+    tc_actual: "HTTP status={{ vrslcm_env.status | default('N/A') }}"
+    tc_status: "{{ 'PASS' if vrslcm_env.status | default(0) == 200 else 'FAIL' }}"
+    tc_target: "{{ vrslcm_fqdn }}"
+    tc_method: "REST API"
+    tc_error: "{{ vrslcm_env.msg | default('') }}"
+  ansible.builtin.include_tasks: _record.yml

@@ -1,0 +1,18 @@
+---
+- name: Write normalized JSON results
+  ansible.builtin.copy:
+    content: "{{ {'run_id': run_id, 'environment': environment_name, 'generated_at': ansible_date_time.iso8601, 'results': results} | to_nice_json }}"
+    dest: "{{ report_dir }}/results.json"
+    mode: "0640"
+
+- name: Render CSV report
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/report.csv.j2"
+    dest: "{{ report_dir }}/report.csv"
+    mode: "0640"
+
+- name: Render HTML report
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/report.html.j2"
+    dest: "{{ report_dir }}/report.html"
+    mode: "0640"

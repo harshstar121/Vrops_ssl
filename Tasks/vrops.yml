@@ -1,0 +1,76 @@
+---
+- name: vROps product UI HTTPS check
+  ansible.builtin.uri:
+    url: "https://{{ vrops_fqdn }}/"
+    method: GET
+    validate_certs: "{{ vrops_api_validate_certs | default(false) }}"
+    status_code: [200, 301, 302, 401, 403]
+    timeout: "{{ thresholds.api_timeout_seconds }}"
+    return_content: false
+  register: vrops_ui
+  failed_when: false
+  changed_when: false
+
+- name: Record vROps UI check
+  ansible.builtin.set_fact:
+    tc_id: "VROPS-001"
+    tc_category: "vROps"
+    tc_name: "vROps Product UI is accessible over HTTPS"
+    tc_severity: "Critical"
+    tc_expected: "vROps HTTPS endpoint responds without transport failure"
+    tc_actual: "HTTP status={{ vrops_ui.status | default('N/A') }}"
+    tc_status: "{{ 'PASS' if vrops_ui.status | default(0) in [200,301,302,401,403] else 'FAIL' }}"
+    tc_target: "{{ vrops_fqdn }}"
+    tc_method: "HTTPS GET"
+    tc_error: "{{ vrops_ui.msg | default('') }}"
+  ansible.builtin.include_tasks: _record.yml
+
+- name: vROps Admin UI HTTPS check
+  ansible.builtin.uri:
+    url: "https://{{ vrops_fqdn }}/admin/"
+    method: GET
+    validate_certs: "{{ vrops_api_validate_certs | default(false) }}"
+    status_code: [200, 301, 302, 401, 403]
+    timeout: "{{ thresholds.api_timeout_seconds }}"
+  register: vrops_admin
+  failed_when: false
+  changed_when: false
+
+- name: Record Admin UI check
+  ansible.builtin.set_fact:
+    tc_id: "VROPS-002"
+    tc_category: "vROps"
+    tc_name: "vROps Admin UI is accessible"
+    tc_severity: "High"
+    tc_expected: "Admin endpoint responds without TLS/connectivity failure"
+    tc_actual: "HTTP status={{ vrops_admin.status | default('N/A') }}"
+    tc_status: "{{ 'PASS' if vrops_admin.status | default(0) in [200,301,302,401,403] else 'FAIL' }}"
+    tc_target: "{{ vrops_fqdn }}"
+    tc_method: "HTTPS GET"
+    tc_error: "{{ vrops_admin.msg | default('') }}"
+  ansible.builtin.include_tasks: _record.yml
+
+- name: vROps API versions endpoint
+  ansible.builtin.uri:
+    url: "https://{{ vrops_fqdn }}{{ api_paths.vrops_health }}"
+    method: GET
+    validate_certs: "{{ vrops_api_validate_certs | default(false) }}"
+    status_code: [200, 401, 403]
+    timeout: "{{ thresholds.api_timeout_seconds }}"
+  register: vrops_api_health
+  failed_when: false
+  changed_when: false
+
+- name: Record API health
+  ansible.builtin.set_fact:
+    tc_id: "VROPS-003"
+    tc_category: "API"
+    tc_name: "vROps API endpoint is reachable"
+    tc_severity: "Critical"
+    tc_expected: "API endpoint responds and TLS negotiation succeeds"
+    tc_actual: "HTTP status={{ vrops_api_health.status | default('N/A') }}"
+    tc_status: "{{ 'PASS' if vrops_api_health.status | default(0) in [200,401,403] else 'FAIL' }}"
+    tc_target: "{{ vrops_fqdn }}"
+    tc_method: "REST API GET"
+    tc_error: "{{ vrops_api_health.msg | default('') }}"
+  ansible.builtin.include_tasks: _record.yml

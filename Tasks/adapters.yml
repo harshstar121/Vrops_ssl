@@ -1,0 +1,62 @@
+---
+# These checks are intentionally API-contract driven. Supply the correct
+# endpoint/query for your Aria Operations release in group_vars.
+- name: Check configured adapter endpoint
+  ansible.builtin.uri:
+    url: "https://{{ vrops_fqdn }}{{ adapter_status_path | default('/suite-api/api/adapters') }}"
+    method: GET
+    validate_certs: "{{ vrops_api_validate_certs | default(false) }}"
+    status_code: [200, 401, 403, 404]
+    timeout: "{{ thresholds.api_timeout_seconds }}"
+    force_basic_auth: true
+    user: "{{ vrops_username }}"
+    password: "{{ vrops_password }}"
+    return_content: true
+  register: adapter_api
+  failed_when: false
+  changed_when: false
+
+- name: Record adapter/API discovery
+  ansible.builtin.set_fact:
+    tc_id: "ADAPTER-001"
+    tc_category: "Adapters"
+    tc_name: "vROps adapter inventory endpoint is reachable"
+    tc_severity: "High"
+    tc_expected: "Adapter inventory API is reachable and authenticated"
+    tc_actual: "HTTP status={{ adapter_api.status | default('N/A') }}"
+    tc_status: "{{ 'PASS' if adapter_api.status | default(0) == 200 else 'FAIL' }}"
+    tc_target: "{{ vrops_fqdn }}"
+    tc_method: "REST API"
+    tc_error: "{{ adapter_api.msg | default('') }}"
+    tc_remediation: "Verify API path for your Aria Operations version and check adapter services."
+  ansible.builtin.include_tasks: _record.yml
+
+- name: Cloud Proxy API check when enabled
+  ansible.builtin.uri:
+    url: "https://{{ vrops_fqdn }}{{ cloud_proxy_status_path | default('/suite-api/api/collectors') }}"
+    method: GET
+    validate_certs: "{{ vrops_api_validate_certs | default(false) }}"
+    status_code: [200, 401, 403, 404]
+    timeout: "{{ thresholds.api_timeout_seconds }}"
+    force_basic_auth: true
+    user: "{{ vrops_username }}"
+    password: "{{ vrops_password }}"
+  register: cloud_proxy_api
+  failed_when: false
+  changed_when: false
+  when: features.cloud_proxy | bool
+
+- name: Record Cloud Proxy check
+  ansible.builtin.set_fact:
+    tc_id: "ADAPTER-002"
+    tc_category: "Adapters"
+    tc_name: "Cloud Proxy/Remote Collector endpoint is reachable"
+    tc_severity: "High"
+    tc_expected: "Cloud Proxy inventory endpoint responds successfully"
+    tc_actual: "HTTP status={{ cloud_proxy_api.status | default('N/A') }}"
+    tc_status: "{{ 'PASS' if cloud_proxy_api.status | default(0) == 200 else 'FAIL' }}"
+    tc_target: "{{ vrops_fqdn }}"
+    tc_method: "REST API"
+    tc_error: "{{ cloud_proxy_api.msg | default('') }}"
+  ansible.builtin.include_tasks: _record.yml
+  when: features.cloud_proxy | bool
