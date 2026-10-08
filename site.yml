@@ -1,0 +1,63 @@
+---
+- name: vROps post SSL renewal validation
+  hosts: localhost
+  gather_facts: true
+  connection: local
+  vars_files:
+    - vars/tests.yml
+    - vars/thresholds.yml
+  vars:
+    run_id: "SSL-{{ ansible_date_time.date | replace('-', '') }}-{{ ansible_date_time.time | replace(':', '') }}"
+    report_dir: "{{ playbook_dir }}/output/{{ run_id }}"
+    results: []
+
+  pre_tasks:
+    - name: Create report directory
+      ansible.builtin.file:
+        path: "{{ report_dir }}"
+        state: directory
+        mode: "0750"
+
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - vrops_fqdn is defined
+          - vrslcm_fqdn is defined
+          - vrops_username is defined
+          - vrops_password is defined
+          - vrslcm_username is defined
+          - vrslcm_password is defined
+        fail_msg: "Required variables are missing. Supply them through group_vars or Ansible Vault."
+
+  tasks:
+    - name: Certificate tests
+      ansible.builtin.include_tasks: tasks/certificate.yml
+      when: tests.certificate | bool
+
+    - name: vROps tests
+      ansible.builtin.include_tasks: tasks/vrops.yml
+      when: tests.vrops | bool
+
+    - name: Adapter and collection tests
+      ansible.builtin.include_tasks: tasks/adapters.yml
+      when: tests.adapters | bool
+
+    - name: vRSLCM tests
+      ansible.builtin.include_tasks: tasks/vrslcm.yml
+      when: tests.vrslcm | bool
+
+    - name: Authentication/API tests
+      ansible.builtin.include_tasks: tasks/api.yml
+      when: tests.api | bool
+
+    - name: Report generation
+      ansible.builtin.include_tasks: tasks/report.yml
+
+  post_tasks:
+    - name: Final result
+      ansible.builtin.debug:
+        msg:
+          - "Run ID: {{ run_id }}"
+          - "HTML: {{ report_dir }}/report.html"
+          - "CSV : {{ report_dir }}/report.csv"
+          - "JSON: {{ report_dir }}/results.json"
